@@ -1,0 +1,37 @@
+LISENS OG BRUKSVILKÅR
+
+Copyright © 2026 Ronny Steen. Alle rettigheter forbeholdt.
+
+Dette materialet er laget for undervisning ved NMBU.
+
+Materialet omfatter blant annet HTML-kode, tekst, læringssti, oppgaveinstruksjoner, pedagogiske forklaringer, tilrettelegging av datafiler og øvrig innhold i dette repositoriet.
+
+Tillatt bruk
+
+Studenter og undervisere som har fått tilgang til materialet gjennom undervisning, kan bruke læringsstien og tilhørende filer som del av undervisning, øving, innlevering og faglig arbeid knyttet til det aktuelle emnet.
+
+Ikke tillatt uten skriftlig tillatelse
+
+Uten skriftlig tillatelse fra Ronny Steen er det ikke tillatt å:
+
+- kopiere materialet for bruk i andre emner, kurs, nettsider eller prosjekter
+- distribuere materialet videre
+- publisere materialet på andre nettsider eller plattformer
+- lage bearbeidede eller videreutviklede versjoner for offentlig eller kommersiell bruk
+- bruke materialet kommersielt
+
+Offentlige data
+
+Data fra SSB og Hjorteviltregisteret følger sine respektive vilkår og rettighetsbestemmelser. Denne lisensen gjelder ikke rettigheter som tilhører disse datakildene.
+
+Lærebok- og fagstoff
+
+Faglige forklaringer og modellbeskrivelser bygger på pensum, undervisning og offentlig tilgjengelig fagkunnskap. Eventuelle sitater eller nært bearbeidede formuleringer fra lærebøker eller andre kilder skal behandles i tråd med gjeldende regler for sitatrett og kildebruk.
+
+Ansvarsfraskrivelse
+
+Materialet er laget for undervisningsformål. Det gis uten garanti for feilfrihet, fullstendighet eller egnethet for bestemte praktiske forvaltningsvedtak. Brukeren har selv ansvar for å kontrollere beregninger, datagrunnlag og tolkninger før materialet brukes utenfor undervisningssammenheng.
+
+Kontakt
+
+For spørsmål om videre bruk eller tillatelse til gjenbruk, kontakt Ronny Steen.
