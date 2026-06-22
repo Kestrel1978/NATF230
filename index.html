@@ -1550,65 +1550,137 @@
         let fjorBestandYear = null;
         let chart3;
 
+
+        // --- PATCH OPPGAVE 3: trygge kolonnenavn og presise beregninger ---
+        function oppg3NormalizeColumnName(s) {
+            return String(s || '')
+                .replace(/^\uFEFF/, '')
+                .replace(/"/g, '')
+                .trim()
+                .toLowerCase()
+                .replace(/\s+/g, ' ');
+        }
+
+        function oppg3ParseNumber(value) {
+            if (value === null || value === undefined) return null;
+            let clean = String(value)
+                .replace(/"/g, '')
+                .replace(/\u00A0/g, '')
+                .trim();
+
+            if (clean === '') return null;
+
+            clean = clean.replace(/\s+/g, '').replace(',', '.');
+            let num = parseFloat(clean);
+            return isNaN(num) ? null : num;
+        }
+
+        function oppg3GetExactVal(headers, parts, columnName) {
+            const target = oppg3NormalizeColumnName(columnName);
+            const idx = headers.findIndex(h => oppg3NormalizeColumnName(h) === target);
+            if (idx < 0) return null;
+            return oppg3ParseNumber(parts[idx]);
+        }
+
+        function oppg3SetDisplayAndRaw(id, rawValue, displayValue) {
+            const el = document.getElementById(id);
+            if (!el) return;
+            el.value = displayValue;
+            el.dataset.raw = String(rawValue);
+        }
+
+        function oppg3ReadRawOrDisplay(id) {
+            const el = document.getElementById(id);
+            if (!el) return NaN;
+            const value = el.dataset.raw !== undefined && el.dataset.raw !== '' ? el.dataset.raw : el.value;
+            const num = parseFloat(value);
+            return isNaN(num) ? NaN : num;
+        }
+
+        function oppg3FormatCount(v, decimals = 1) {
+            if (v === null || v === undefined || isNaN(v)) return '?';
+            if (Math.abs(v - Math.round(v)) < 0.000001) return String(Math.round(v));
+            return v.toFixed(decimals);
+        }
+
+        function oppg3GetDisplayAndRawForType(type) {
+            const inputMap = {
+                ku1: 'ku1',
+                ku2: 'ku2',
+                sett: 'settTotalt',
+                felt: 'feltTotalt'
+            };
+            const inputId = inputMap[type];
+            const el = document.getElementById(inputId);
+            if (!el) return { display: '0', raw: '0' };
+            return {
+                display: el.value || '0',
+                raw: el.dataset.raw !== undefined && el.dataset.raw !== '' ? el.dataset.raw : (el.value || '0')
+            };
+        }
+
         async function behandleOppg3Filer(filesObjects) {
             let byYear = {};
             let fb = document.getElementById('hjortFeedback3');
-            fb.innerText = "Leter etter data i filene..."; fb.style.color = "var(--text-main)";
+            fb.innerText = "Leter etter data i filene...";
+            fb.style.color = "var(--text-main)";
 
             try {
-                for(let i=0; i<filesObjects.length; i++) {
+                for (let i = 0; i < filesObjects.length; i++) {
                     let text = await filesObjects[i].text();
-                    let lines = text.split('\n');
-                    if(lines.length < 2) continue;
+                    let lines = text.split('\n').filter(line => line.trim() !== '');
+                    if (lines.length < 2) continue;
+
                     let delim = lines[0].includes(';') ? ';' : ',';
-                    let h1 = lines[0].toLowerCase().split(delim).map(h => h.replace(/"/g, '').trim());
+                    let headers = lines[0].split(delim).map(h => h.replace(/^\uFEFF/, '').replace(/"/g, '').trim());
+                    let yearIdx = headers.findIndex(h => oppg3NormalizeColumnName(h) === 'jaktår');
+                    if (yearIdx < 0) yearIdx = 0;
 
-                    for(let j=1; j<lines.length; j++) {
-                        if(!lines[j].trim()) continue;
+                    for (let j = 1; j < lines.length; j++) {
                         let parts = lines[j].split(delim);
-                        let y = parseInt(parts[0].replace(/"/g,''));
-                        if(isNaN(y)) continue;
+                        let y = parseInt(String(parts[yearIdx] || '').replace(/"/g, '').trim());
+                        if (isNaN(y)) continue;
 
-                        if(!byYear[y]) byYear[y] = { ku1: null, ku2: null, settTot: null, feltTot: null, settDag: null, feltDag: null };
+                        if (!byYear[y]) {
+                            byYear[y] = {
+                                ku1: null,
+                                ku2: null,
+                                settTot: null,
+                                feltTot: null,
+                                settDag: null,
+                                feltDag: null
+                            };
+                        }
 
-                        let getVal = (keywords) => {
-                            let idx = h1.findIndex(h => keywords.some(kw => h === kw || h.includes(kw)));
-                            if(idx >= 0 && parts[idx]) {
-                                let clean = parts[idx].replace(/"/g,'').replace(',', '.').trim();
-                                let num = parseFloat(clean);
-                                return isNaN(num) ? null : num;
-                            }
-                            return null;
-                        };
+                        // Eksakt kolonnematching. Dette hindrer at "Ku uten kalv" blir tolket som "Ku med en kalv".
+                        let k1 = oppg3GetExactVal(headers, parts, 'Ku med en kalv');
+                        let k2 = oppg3GetExactVal(headers, parts, 'Ku med to kalver');
+                        let st = oppg3GetExactVal(headers, parts, 'Sum sette elg');
+                        let ft = oppg3GetExactVal(headers, parts, 'Sum felte');
+                        let sd = oppg3GetExactVal(headers, parts, 'Sett per jegerdag');
+                        let fd = oppg3GetExactVal(headers, parts, 'Felt per jegerdag');
 
-                        let k1 = getVal(['ku med 1', 'ku m/ 1', '1 kalv', 'en kalv']);
-                        let k2 = getVal(['ku med 2', 'ku m/ 2', '2 kalver', 'to kalver']);
-                        let st = getVal(['sette elg totalt', 'sette dyr totalt', 'sum sette', 'sett totalt', 'totalt sett']);
-                        let ft = getVal(['totalt skutt', 'felte dyr', 'felt totalt', 'sum felte', 'totalt felt']);
-                        let sd = getVal(['sett elg pr', 'sett pr', 'sett per jegerdag', 'sett pr. jegerdag']);
-                        let fd = getVal(['felt elg pr', 'felt pr', 'felt per jegerdag', 'felt pr. jegerdag']);
-
-                        if(k1 !== null) byYear[y].ku1 = k1;
-                        if(k2 !== null) byYear[y].ku2 = k2;
-                        if(st !== null) byYear[y].settTot = st;
-                        if(ft !== null) byYear[y].feltTot = ft;
-                        if(sd !== null) byYear[y].settDag = sd;
-                        if(fd !== null) byYear[y].feltDag = fd;
+                        if (k1 !== null) byYear[y].ku1 = k1;
+                        if (k2 !== null) byYear[y].ku2 = k2;
+                        if (st !== null) byYear[y].settTot = st;
+                        if (ft !== null) byYear[y].feltTot = ft;
+                        if (sd !== null) byYear[y].settDag = sd;
+                        if (fd !== null) byYear[y].feltDag = fd;
                     }
                 }
 
                 // Alle år med felt elg per jegerdag beholdes for å finne fjoråret.
                 // Bare 2005-2017 brukes som mulig referanseperiode, fordi "Sett elg per jegerdag" ikke er sammenlignbar etter instruksjonsendringen i 2018.
                 globalOppg3AllData = Object.keys(byYear)
-                    .map(k => ({year: parseInt(k), ...byYear[k]}))
+                    .map(k => ({ year: parseInt(k), ...byYear[k] }))
                     .filter(d => d.feltDag > 0)
-                    .sort((a,b)=>a.year - b.year);
+                    .sort((a, b) => a.year - b.year);
 
                 globalOppg3Data = globalOppg3AllData
                     .filter(d => d.year >= 2005 && d.year <= 2017 && d.settDag > 0 && d.feltDag > 0)
-                    .sort((a,b)=>a.year - b.year);
+                    .sort((a, b) => a.year - b.year);
 
-                if(globalOppg3Data.length >= 3) {
+                if (globalOppg3Data.length >= 3) {
                     document.getElementById('oppg3Interactive').style.display = 'block';
                     let slider = document.getElementById('oppg3Slider');
                     slider.max = globalOppg3Data.length - 3;
@@ -1627,6 +1699,7 @@
             }
         }
 
+        // --- FILNAVNSJEKK FOR HJORTEVILTREGISTERET ---
         // --- FILNAVNSJEKK FOR HJORTEVILTREGISTERET ---
         const expectedOppg2FileNames = [
             'Elg_SettKalvPerKu.xlsx',
@@ -1922,10 +1995,10 @@
 
         function oppdaterOppg3Valg() {
             let idx = parseInt(document.getElementById('oppg3Slider').value);
-            if(isNaN(idx) || !globalOppg3Data[idx]) return;
+            if (isNaN(idx) || !globalOppg3Data[idx]) return;
 
-            let y1 = globalOppg3Data[idx], y2 = globalOppg3Data[idx+1], y3 = globalOppg3Data[idx+2];
-            if(!y2 || !y3) return;
+            let y1 = globalOppg3Data[idx], y2 = globalOppg3Data[idx + 1], y3 = globalOppg3Data[idx + 2];
+            if (!y2 || !y3) return;
 
             document.getElementById('oppg3SliderLabel').innerText = `${y1.year} - ${y3.year}`;
 
@@ -1934,10 +2007,10 @@
             let pointRadii = new Array(globalOppg3Data.length).fill(3);
             let pointColors2 = new Array(globalOppg3Data.length).fill('#f59e0b');
 
-            [idx, idx+1, idx+2].forEach(i => {
-                pointColors1[i] = '#ef4444'; 
+            [idx, idx + 1, idx + 2].forEach(i => {
+                pointColors1[i] = '#ef4444';
                 pointColors2[i] = '#ef4444';
-                pointRadii[i] = 7; 
+                pointRadii[i] = 7;
             });
 
             chart3.data.datasets[0].pointBackgroundColor = pointColors1;
@@ -1946,15 +2019,18 @@
             chart3.data.datasets[1].pointRadius = pointRadii;
             chart3.update();
 
-            // Calculate 3-year averages and push to inputs
-            let avgKu1 = Math.round(((y1.ku1||0) + (y2.ku1||0) + (y3.ku1||0))/3);
-            let avgKu2 = Math.round(((y1.ku2||0) + (y2.ku2||0) + (y3.ku2||0))/3);
-            let avgSett = Math.round(((y1.settTot||0) + (y2.settTot||0) + (y3.settTot||0))/3);
-            let avgFelt = Math.round(((y1.feltTot||0) + (y2.feltTot||0) + (y3.feltTot||0))/3);
-            let avgFeltDag = (((y1.feltDag||0) + (y2.feltDag||0) + (y3.feltDag||0))/3).toFixed(3);
+            // Uavrundede 3-årssnitt brukes videre i beregningene.
+            // Avrundede tall vises i inputfeltene og på byggeklossene.
+            const avg3 = (a, b, c) => ((a || 0) + (b || 0) + (c || 0)) / 3;
+
+            let avgKu1Raw = avg3(y1.ku1, y2.ku1, y3.ku1);
+            let avgKu2Raw = avg3(y1.ku2, y2.ku2, y3.ku2);
+            let avgSettRaw = avg3(y1.settTot, y2.settTot, y3.settTot);
+            let avgFeltRaw = avg3(y1.feltTot, y2.feltTot, y3.feltTot);
+            let avgFeltDagRaw = avg3(y1.feltDag, y2.feltDag, y3.feltDag);
 
             let fb = document.getElementById('hjortFeedback3');
-            if (avgSett === 0 || avgFelt === 0) {
+            if (avgSettRaw === 0 || avgFeltRaw === 0) {
                 fb.innerText = "⚠️ Graf tegnet, men mangler absolutte tall. Har du husket å laste opp 'Sette elg' og 'Felling'?";
                 fb.style.color = "var(--error)";
             } else {
@@ -1962,16 +2038,19 @@
                 fb.style.color = "var(--success)";
             }
 
-            document.getElementById('ku1').value = avgKu1;
-            document.getElementById('ku2').value = avgKu2;
-            document.getElementById('settTotalt').value = avgSett;
-            document.getElementById('feltTotalt').value = avgFelt;
-            
-            document.getElementById('feltRef').value = avgFeltDag;
+            // Avrundet visning, uavrundet råverdi lagres i dataset.raw.
+            oppg3SetDisplayAndRaw('ku1', avgKu1Raw, Math.round(avgKu1Raw));
+            oppg3SetDisplayAndRaw('ku2', avgKu2Raw, Math.round(avgKu2Raw));
+            oppg3SetDisplayAndRaw('settTotalt', avgSettRaw, Math.round(avgSettRaw));
+            oppg3SetDisplayAndRaw('feltTotalt', avgFeltRaw, Math.round(avgFeltRaw));
+            oppg3SetDisplayAndRaw('feltRef', avgFeltDagRaw, avgFeltDagRaw.toFixed(3));
 
-            let lastYear = globalOppg3AllData.filter(d => d.feltDag > 0).slice(-1)[0] || globalOppg3Data[globalOppg3Data.length-1];
+            let lastYear = globalOppg3AllData.filter(d => d.feltDag > 0).slice(-1)[0] || globalOppg3Data[globalOppg3Data.length - 1];
             fjorBestandYear = lastYear ? lastYear.year : null;
-            document.getElementById('feltFjor').value = lastYear.feltDag.toFixed(3);
+            if (lastYear) {
+                oppg3SetDisplayAndRaw('feltFjor', lastYear.feltDag, lastYear.feltDag.toFixed(3));
+            }
+
             const feltFjorLabel = document.getElementById('feltFjorAarLabel');
             if (feltFjorLabel) feltFjorLabel.innerText = fjorBestandYear ? `(${fjorBestandYear})` : '';
 
@@ -1979,9 +2058,11 @@
             document.getElementById('calcDetails3a').innerHTML = `
                 <div style="font-family: 'Inter', sans-serif;">
                     <strong style="color: #38bdf8;">BAKENFORLIGGENDE MATEMATIKK (Gjennomsnitt av valgt 3-års bolk i referanseperioden 2005-2017: ${y1.year}-${y3.year}):</strong><br>
-                    Tallene over er snittet av de tre årene du har valgt på tidslinjen. For eksempel beregnes totalt antall felte dyr slik:
+                    Tallene over er avrundet i visningen, men kalkulatoren bruker uavrundede 3-årssnitt videre i beregningene.<br><br>
+                    Eksempel, totalt antall felte dyr:
                     <div class="formula-highlight" style="font-size: 0.85rem;">Felt snitt = (Felt År1 + Felt År2 + Felt År3) / 3</div>
-                    Beregning: (${y1.feltTot||0} + ${y2.feltTot||0} + ${y3.feltTot||0}) / 3 = <strong>${avgFelt} elg</strong>
+                    Beregning: (${y1.feltTot || 0} + ${y2.feltTot || 0} + ${y3.feltTot || 0}) / 3 = <strong>${avgFeltRaw.toFixed(2)} elg</strong><br>
+                    Vist avrundet i feltet over: <strong>${Math.round(avgFeltRaw)} elg</strong>
                 </div>
             `;
 
@@ -1996,6 +2077,8 @@
             updateBank();
         }
 
+
+        // --- FELLES: LANGSOM AUTOMATISK RULLING VED DRA OG SLIPP ---
 
 
         // --- FELLES: LANGSOM AUTOMATISK RULLING VED DRA OG SLIPP ---
@@ -2123,23 +2206,49 @@
         let selectedTileType = null, selectedTileValue = null;
 
         function updateBank() {
-            document.getElementById('t-ku1').innerText = document.getElementById('ku1').value || 0;
-            document.getElementById('t-ku2').innerText = document.getElementById('ku2').value || 0;
-            document.getElementById('t-sett').innerText = document.getElementById('settTotalt').value || 0;
-            document.getElementById('t-felt').innerText = document.getElementById('feltTotalt').value || 0;
+            const updateTile = (tileId, inputId) => {
+                const tile = document.getElementById(tileId);
+                const input = document.getElementById(inputId);
+                if (!tile || !input) return;
+
+                // Vis avrundet verdi på byggeklossen, men behold råverdien som data-attributt.
+                tile.innerText = input.value || 0;
+                tile.dataset.raw = input.dataset.raw !== undefined && input.dataset.raw !== '' ? input.dataset.raw : (input.value || '0');
+            };
+
+            updateTile('t-ku1', 'ku1');
+            updateTile('t-ku2', 'ku2');
+            updateTile('t-sett', 'settTotalt');
+            updateTile('t-felt', 'feltTotalt');
+
             resetFormulas();
         }
 
         function resetFormulas() {
-            document.querySelectorAll('.dz').forEach(dz => { dz.innerHTML = dz.dataset.name; dz.dataset.value = ""; dz.classList.remove('filled', 'error'); });
-            clearSelection(); calculateFormulas();
+            document.querySelectorAll('.dz').forEach(dz => {
+                dz.innerHTML = dz.dataset.name;
+                dz.dataset.value = "";
+                dz.dataset.raw = "";
+                dz.classList.remove('filled', 'error');
+            });
+            clearSelection();
+            calculateFormulas();
         }
 
         function visFasitDragDrop() {
             const acceptMap = { 'ku1': 'ku1', 'ku2': 'ku2', 'sett': 'settTotalt', 'felt': 'feltTotalt' };
             document.querySelectorAll('.dz').forEach(dz => {
-                const val = document.getElementById(acceptMap[dz.dataset.accept]).value || "0";
-                dz.innerHTML = val; dz.dataset.value = val; dz.classList.add('filled'); dz.classList.remove('error');
+                const input = document.getElementById(acceptMap[dz.dataset.accept]);
+                if (!input) return;
+
+                const displayVal = input.value || "0";
+                const rawVal = input.dataset.raw !== undefined && input.dataset.raw !== '' ? input.dataset.raw : displayVal;
+
+                dz.innerHTML = displayVal;
+                dz.dataset.value = rawVal;
+                dz.dataset.raw = rawVal;
+                dz.classList.add('filled');
+                dz.classList.remove('error');
             });
             calculateFormulas();
         }
@@ -2161,8 +2270,23 @@
         });
 
         function processDrop(dz, type, val) {
-            if (type === dz.dataset.accept) { dz.innerHTML = val; dz.dataset.value = val; dz.classList.add('filled'); dz.classList.remove('error'); calculateFormulas(); } 
-            else { dz.innerHTML = "Feil blokk!"; dz.classList.add('error'); dz.classList.remove('filled'); dz.dataset.value = ""; setTimeout(() => { dz.classList.remove('error'); dz.innerHTML = dz.dataset.name; }, 800); }
+            if (type === dz.dataset.accept) {
+                const valueObj = oppg3GetDisplayAndRawForType(type);
+
+                dz.innerHTML = valueObj.display;
+                dz.dataset.value = valueObj.raw;
+                dz.dataset.raw = valueObj.raw;
+                dz.classList.add('filled');
+                dz.classList.remove('error');
+                calculateFormulas();
+            } else {
+                dz.innerHTML = "Feil blokk!";
+                dz.classList.add('error');
+                dz.classList.remove('filled');
+                dz.dataset.value = "";
+                dz.dataset.raw = "";
+                setTimeout(() => { dz.classList.remove('error'); dz.innerHTML = dz.dataset.name; }, 800);
+            }
         }
 
         function calculateFormulas() {
@@ -2170,49 +2294,104 @@
             const dz_ku1_k = document.querySelectorAll('.dz[data-accept="ku1"]')[1], dz_ku2_k = document.querySelectorAll('.dz[data-accept="ku2"]')[1];
             const dz_felt = document.querySelector('.dz[data-accept="felt"]'), dz_sett = document.querySelector('.dz[data-accept="sett"]');
 
+            const readDzRaw = (dz) => {
+                if (!dz) return null;
+                const value = dz.dataset.raw !== undefined && dz.dataset.raw !== '' ? dz.dataset.raw : dz.dataset.value;
+                const num = parseFloat(value);
+                return isNaN(num) ? null : num;
+            };
+
             let fodte = null, kuer = null, kalvprku = null, prodku = null, andel = null;
 
-            if (dz_ku1_f.dataset.value && dz_ku2_f.dataset.value) { fodte = parseFloat(dz_ku1_f.dataset.value) + (parseFloat(dz_ku2_f.dataset.value) * 2); document.getElementById('res-fodte').innerText = fodte; } else { document.getElementById('res-fodte').innerText = "?"; }
-            if (dz_ku1_k.dataset.value && dz_ku2_k.dataset.value) { kuer = parseFloat(dz_ku1_k.dataset.value) + parseFloat(dz_ku2_k.dataset.value); document.getElementById('res-kuer').innerText = kuer; } else { document.getElementById('res-kuer').innerText = "?"; }
-            if (fodte !== null && kuer !== null) { kalvprku = fodte / kuer; document.getElementById('res-kalvprku').innerText = kalvprku.toFixed(2); } else { document.getElementById('res-kalvprku').innerText = "?"; }
-            if (dz_felt.dataset.value && kalvprku !== null) { prodku = parseFloat(dz_felt.dataset.value) / kalvprku; document.getElementById('res-prodku').innerText = prodku.toFixed(1); } else { document.getElementById('res-prodku').innerText = "?"; }
-            if (kuer !== null && dz_sett.dataset.value) { andel = kuer / parseFloat(dz_sett.dataset.value); document.getElementById('res-andel').innerText = andel.toFixed(3); } else { document.getElementById('res-andel').innerText = "?"; }
+            let ku1F = readDzRaw(dz_ku1_f);
+            let ku2F = readDzRaw(dz_ku2_f);
+            let ku1K = readDzRaw(dz_ku1_k);
+            let ku2K = readDzRaw(dz_ku2_k);
+            let felt = readDzRaw(dz_felt);
+            let sett = readDzRaw(dz_sett);
 
-            if (prodku !== null && andel !== null) {
-                let ref = Math.round(prodku / andel);
-                document.getElementById('res-ref').innerText = ref + " elg 🫎";
+            if (ku1F !== null && ku2F !== null) {
+                fodte = ku1F + (ku2F * 2);
+                document.getElementById('res-fodte').innerText = oppg3FormatCount(fodte);
+            } else {
+                document.getElementById('res-fodte').innerText = "?";
+            }
+
+            if (ku1K !== null && ku2K !== null) {
+                kuer = ku1K + ku2K;
+                document.getElementById('res-kuer').innerText = oppg3FormatCount(kuer);
+            } else {
+                document.getElementById('res-kuer').innerText = "?";
+            }
+
+            if (fodte !== null && kuer !== null && kuer > 0) {
+                kalvprku = fodte / kuer;
+                document.getElementById('res-kalvprku').innerText = kalvprku.toFixed(2);
+            } else {
+                document.getElementById('res-kalvprku').innerText = "?";
+            }
+
+            if (felt !== null && kalvprku !== null && kalvprku > 0) {
+                prodku = felt / kalvprku;
+                document.getElementById('res-prodku').innerText = prodku.toFixed(1);
+            } else {
+                document.getElementById('res-prodku').innerText = "?";
+            }
+
+            if (kuer !== null && sett !== null && sett > 0) {
+                andel = kuer / sett;
+                document.getElementById('res-andel').innerText = andel.toFixed(3);
+            } else {
+                document.getElementById('res-andel').innerText = "?";
+            }
+
+            if (prodku !== null && andel !== null && andel > 0) {
+                let refRaw = prodku / andel;
+                document.getElementById('res-ref').innerText = Math.round(refRaw) + " elg 🫎";
                 document.getElementById('finalBox').style.transform = "scale(1.02)";
                 setTimeout(() => document.getElementById('finalBox').style.transform = "scale(1)", 200);
-                fasitRef = ref; fasitKalv = kalvprku;
+
+                // Uavrundet referansebestand brukes videre i tetthetsberegningen.
+                fasitRef = refRaw;
+                fasitKalv = kalvprku;
                 document.getElementById('sisteDelOppg3').style.display = 'block';
-            } else { document.getElementById('res-ref').innerText = "?"; document.getElementById('sisteDelOppg3').style.display = 'none'; }
+            } else {
+                document.getElementById('res-ref').innerText = "?";
+                document.getElementById('sisteDelOppg3').style.display = 'none';
+            }
         }
 
         function beregnTetthet() {
-            let refDag = parseFloat(document.getElementById('feltRef').value);
-            let fjorDag = parseFloat(document.getElementById('feltFjor').value);
+            let refDag = oppg3ReadRawOrDisplay('feltRef');
+            let fjorDag = oppg3ReadRawOrDisplay('feltFjor');
             let arealKm2 = parseFloat(document.getElementById('arealDaa').value) / 1000;
-            if (refDag > 0 && fjorDag > 0 && arealKm2 > 0) {
-                fjorBestand = (fasitRef / refDag) * fjorDag; tetthetRes = fjorBestand / arealKm2;
+
+            if (fasitRef > 0 && refDag > 0 && fjorDag > 0 && arealKm2 > 0) {
+                fjorBestand = (fasitRef / refDag) * fjorDag;
+                tetthetRes = fjorBestand / arealKm2;
+
                 const fjorBestandAarTekst = fjorBestandYear ? ` (${fjorBestandYear})` : '';
                 document.getElementById('resTetthet').innerHTML = `<strong style="color:#0f172a;">Resultat:</strong><br>Bestand fjor${fjorBestandAarTekst}: ${Math.round(fjorBestand)} dyr.<br>Tetthet${fjorBestandAarTekst}: <strong>${tetthetRes.toFixed(2)} elg / km²</strong>.`;
                 document.getElementById('resTetthet').style.display = 'block';
-                
+
                 document.getElementById('calcDetails3').innerHTML = `
                     <div style="font-family: 'Inter', sans-serif;">
                         <strong style="color: #38bdf8;">BAKENFORLIGGENDE MATEMATIKK (OPPGAVE 3):</strong><br>
+                        Tallene som vises i feltene er avrundet, men beregningen bruker uavrundede verdier internt.<br><br>
                         Korreksjonsfaktor for å oppjustere bestanden til fjorårets nivå${fjorBestandAarTekst}:
                         <div class="formula-highlight" style="font-size: 0.85rem;">Bestand fjor = (Referansebestand / IndeksReferanse) × IndeksFjorår</div>
-                        Beregning: (${Math.round(fasitRef)} / ${refDag}) × ${fjorDag} = <strong>${Math.round(fjorBestand)} elg</strong>
+                        Beregning: (${fasitRef.toFixed(2)} / ${refDag.toFixed(6)}) × ${fjorDag.toFixed(6)} = <strong>${fjorBestand.toFixed(2)} elg</strong>
                         <br><br>
-                        Tetthetsberegningen deles ganske enkelt på arealet i km²:
+                        Tetthetsberegningen deles på arealet i km²:
                         <div class="formula-highlight" style="font-size: 0.85rem;">Tetthet = Bestand fjor / Areal i km²</div>
-                        Beregning: ${Math.round(fjorBestand)} / ${arealKm2} = <strong>${tetthetRes.toFixed(2)} elg per km²</strong>
+                        Beregning: ${fjorBestand.toFixed(2)} / ${arealKm2.toFixed(3)} = <strong>${tetthetRes.toFixed(2)} elg per km²</strong>
                     </div>
                 `;
                 document.getElementById('btnToggleCalc3').style.display = 'inline-flex';
             }
         }
+
+        // --- OPPGAVE 4: 3-SCENARIO SIMULATOR ---
 
         // --- OPPGAVE 4: 3-SCENARIO SIMULATOR ---
         let kjottAKm2 = "", kjottBText = "", kjottFjorYear = null;
